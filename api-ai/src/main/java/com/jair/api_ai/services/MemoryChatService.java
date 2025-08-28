@@ -1,6 +1,9 @@
 package com.jair.api_ai.services;
 
-import com.jair.api_ai.chat.ChatMessage;
+import com.jair.api_ai.chat.NewChatResponse;
+import com.jair.api_ai.memory.Chat;
+import com.jair.api_ai.memory.ChatMessage;
+import com.jair.api_ai.memory.MemoryChatRepository;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
@@ -8,12 +11,22 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class MemoryChatService {
 
+    private static final String USER_ID = "Jair";
+    private static final String DESCRIPTION_PROMPT = "Generate a chat description based on the message, limiting the description to 30 characters; ";
+
     private final ChatClient chatClient;
 
-    public MemoryChatService(ChatClient.Builder builder) {
+    private final MemoryChatRepository memoryChatRepository;
+
+    public MemoryChatService(ChatClient.Builder builder,
+                             MemoryChatRepository memoryChatRepository) {
+        this.memoryChatRepository = memoryChatRepository;
+
         ChatMemory chatMemory = MessageWindowChatMemory.builder()
                 .maxMessages(10)
                 .build();
@@ -26,12 +39,34 @@ public class MemoryChatService {
                 .build();
     }
 
-    public String memoryChat(String message) {
+    public String chat(String message, String chatId) {
         return this.chatClient.prompt()
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, "123456"))
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatId))
                 .user(message)
                 .call()
                 .content();
+    }
+
+    public NewChatResponse createNewChat(String message) {
+        String description = this.generateDescription(message);
+        String chatId = this.memoryChatRepository.generateChatId(USER_ID, description);
+        String response = this.chat(message, chatId);
+        return new NewChatResponse(chatId, description, response);
+    }
+
+    private String generateDescription(String message) {
+        return this.chatClient.prompt()
+                .user(DESCRIPTION_PROMPT + message)
+                .call()
+                .content();
+    }
+
+    public List<Chat> getAllChatsForUser() {
+        return this.memoryChatRepository.getAllChartsForUser(USER_ID);
+    }
+
+    public List<ChatMessage> getChatMessages(String chatId) {
+        return this.memoryChatRepository.getChatMessage(chatId);
     }
 }
 
